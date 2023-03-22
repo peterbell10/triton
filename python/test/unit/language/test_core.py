@@ -714,7 +714,8 @@ def test_atomic_rmw(op, dtype_x_str, mode, device='cuda'):
 
 @pytest.mark.parametrize("shape, axis",
                          [(shape, axis) for shape in [(2, 2), (2, 8), (8, 2), (8, 8), (32, 32)] for axis in [0, 1]])
-def test_tensor_atomic_rmw(shape, axis, device="cuda"):
+@pytest.mark.parametrize("dtype_str", float_dtypes + ['bfloat16'])
+def test_tensor_atomic_rmw(shape, axis, dtype_str, device="cuda"):
     shape0, shape1 = shape
     # triton kernel
 

@@ -121,6 +121,7 @@ def early_config_prune(configs, named_args):
     configs = pruned_configs
 
     # Some dtypes do not allow atomic_add
+    # TODO: enable for bfloat16 if compute capability 8.0+
     if dtype not in [torch.float16, torch.float32]:
         configs = [config for config in configs if config.kwargs['SPLIT_K'] == 1]
 
