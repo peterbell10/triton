@@ -1,4 +1,4 @@
-﻿#include <mutex>
+#include <mutex>
 #include <stack>
 #include <unordered_map>
 
@@ -1746,6 +1746,10 @@ void init_triton_ir(py::module &&m) {
       .def("add_tritongpu_optimize_dot_operands_pass",
            [](mlir::PassManager &self) {
              self.addPass(mlir::createTritonGPUOptimizeDotOperandsPass());
+           })
+      .def("add_tritongpu_optimize_scan_operands_pass",
+           [](mlir::PassManager &self) {
+             self.addPass(mlir::createTritonGPUOptimizeScanOperandsPass());
            })
       .def("add_tritongpu_remove_layout_conversions_pass",
            [](mlir::PassManager &self) {

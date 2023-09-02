@@ -243,7 +243,7 @@ static bool isLayoutAnchor(Operation *op) {
     return isExpensiveLoadOrStore(op);
   if (isa<triton::DotOp, triton::AtomicRMWOp, triton::AtomicCASOp>(op))
     return true;
-  return false;
+  return isa<triton::ScanOp>(op);
 }
 
 void LayoutPropagation::initAnchorLayout() {
@@ -280,6 +280,16 @@ void LayoutPropagation::setEncoding(ValueRange values, LayoutInfo &info,
     if (hasChanged)
       changed.push_back(value);
   }
+}
+
+static bool canRewriteElementwise(Operation *op) {
+  return (
+      // Don't rewrite ScanOp as encoding strongly effects scan performance
+      !isa<triton::ScanOp>(op) &&
+      (op->hasTrait<mlir::OpTrait::SameOperandsAndResultEncoding>() ||
+       op->hasTrait<mlir::OpTrait::Elementwise>() ||
+       isa<triton::ReduceOp, triton::ExpandDimsOp,
+           triton::gpu::ConvertLayoutOp>(op)));
 }
 
 SmallVector<Value> LayoutPropagation::propagateToUsers(Value value,
@@ -328,10 +338,7 @@ SmallVector<Value> LayoutPropagation::propagateToUsers(Value value,
     // Workaround: don't propagate through truncI
     if (isa<arith::TruncIOp>(user))
       continue;
-    if (user->hasTrait<mlir::OpTrait::SameOperandsAndResultEncoding>() ||
-        user->hasTrait<mlir::OpTrait::Elementwise>() ||
-        isa<triton::ReduceOp, triton::ExpandDimsOp,
-            triton::gpu::ConvertLayoutOp>(user)) {
+    if (canRewriteElementwise(user)) {
       setEncoding(user->getResults(), info, changed, user);
       continue;
     }
@@ -716,10 +723,7 @@ Operation *LayoutPropagation::rewriteOp(Operation *op) {
     map(op->getResult(0), cvt.getResult());
     return cvt.getOperation();
   }
-  if (op->hasTrait<mlir::OpTrait::SameOperandsAndResultEncoding>() ||
-      op->hasTrait<mlir::OpTrait::Elementwise>() ||
-      isa<triton::ReduceOp, triton::ExpandDimsOp, triton::gpu::ConvertLayoutOp>(
-          op)) {
+  if (canRewriteElementwise(op)) {
     Operation *newOp = cloneElementwise(rewriter, op, encoding);
     for (auto [oldResult, newResult] :
          llvm::zip(op->getResults(), newOp->getResults()))
@@ -735,7 +739,7 @@ static bool canBeRemat(Operation *op) {
     return !isExpensiveLoadOrStore(op);
   if (isa<tensor::ExtractSliceOp, triton::gpu::AllocTensorOp,
           triton::gpu::InsertSliceAsyncOp, triton::AtomicRMWOp,
-          triton::AtomicCASOp, triton::DotOp>(op))
+          triton::AtomicCASOp, triton::DotOp, triton::ScanOp>(op))
     return false;
   if (isa<scf::IfOp, scf::WhileOp, scf::ConditionOp>(op))
     return false;

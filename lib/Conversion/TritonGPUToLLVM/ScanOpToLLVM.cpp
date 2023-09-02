@@ -2,6 +2,8 @@
 #include "TritonGPUToLLVMBase.h"
 #include "triton/Analysis/Utility.h"
 
+#include <iostream>
+
 using namespace mlir;
 using namespace mlir::triton;
 
@@ -70,6 +72,8 @@ static void warpScan(SmallVector<Value> &srcValues,
     // Only consider the last element of each contiguous chunk of elements.
     if (elementIdx != scanElementsPerThreads - 1)
       continue;
+    llvm::errs() << "Warp Scan: " << srcIndex << " " << elementIdx << " "
+                 << scanElementsPerThreads << "\n";
     // Reduce within warps.
     Value acc = srcValues[srcIndex];
     for (unsigned i = 1; i <= (scanDim) / 2; i = i << 1) {
@@ -150,6 +154,7 @@ static void AddPartialReduce(SmallVector<Value> &srcValues,
   unsigned blockStride = helper.getAxisBlockStride();
   for (unsigned srcIndex = 0; srcIndex < srcValues.size(); srcIndex++) {
     unsigned elementIdx = (srcIndex / elementStride) % scanElementsPerThreads;
+    std::cout << srcIndex << " " << elementIdx << " " << scanElementsPerThreads;
     // Only consider the last element of each contiguous chunk of elements.
     if (elementIdx != scanElementsPerThreads - 1)
       continue;
@@ -188,6 +193,8 @@ static void AddPartialReduce(SmallVector<Value> &srcValues,
       temp = select(maskFirstWarp, srcValues[srcIndex], temp);
     }
     srcValues[srcIndex] = temp;
+    llvm::errs() << "AddPertialReductions" << srcIndex << " " << threadStride
+                 << "\n";
     // Update the rest of the contiguous elements.
     Value lastElement =
         shflUpSync(loc, rewriter, srcValues[srcIndex], threadStride);

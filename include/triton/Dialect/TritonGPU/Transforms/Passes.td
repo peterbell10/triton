@@ -148,4 +148,21 @@ def TritonGPUDecomposeConversions: Pass<"tritongpu-decompose-conversions", "mlir
                            "mlir::triton::TritonDialect"];
 }
 
+
+def TritonGPUOptimizeScanOperands : Pass<"tritongpu-optimize-scan-operands", "mlir::ModuleOp"> {
+  let summary = "Convert operands into a format suitable for scan";
+
+  let description = [{
+    Scans perform better when there are chunks of neighbouring elements on the same thread,
+    so we insert layout conversions to ensure this.
+  }];
+
+  let constructor = "mlir::createTritonGPUOptimizeScanOperandsPass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::nvidia_gpu::TritonNvidiaGPUDialect",
+                           "mlir::triton::TritonDialect"];
+}
+
+
 #endif

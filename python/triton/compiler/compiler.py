@@ -117,6 +117,7 @@ def optimize_ttgir(mod, num_stages, num_warps, num_ctas, arch,
     if arch // 10 <= 8:
         pm.add_tritongpu_prefetch_pass()
     pm.add_tritongpu_optimize_dot_operands_pass()
+    pm.add_tritongpu_optimize_scan_operands_pass()
     pm.add_tritongpu_remove_layout_conversions_pass()
     pm.add_tritongpu_decompose_conversions_pass()
     pm.add_tritongpu_ws_fixup_missing_attrs_pass()
