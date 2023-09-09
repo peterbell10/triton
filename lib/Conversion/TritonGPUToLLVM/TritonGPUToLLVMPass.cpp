@@ -781,7 +781,8 @@ private:
           // TODO(Chenggang): confirm `boundaryCheck` and `padding`
           /*boundaryCheck=*/nullptr, /*padding=*/nullptr,
           insertSliceAsyncOp.getCache(), insertSliceAsyncOp.getEvict(),
-          insertSliceAsyncOp.getIsVolatile());
+          insertSliceAsyncOp.getIsVolatile(),
+          /*sem=*/triton::MemSemantic::WEAK);
       addWSNamedAttrs(loadOp, insertSliceAsyncOp->getAttrs());
 
       // insert_slice

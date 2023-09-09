@@ -100,7 +100,8 @@ public:
     }
 
     rewriter.replaceOpWithNewOp<triton::StoreOp>(
-        stOp, newPtr, newVal, newMask, stOp.getCache(), stOp.getEvict());
+        stOp, newPtr, newVal, newMask, stOp.getCache(), stOp.getEvict(),
+        stOp.getSem());
     return mlir::success();
   }
 };

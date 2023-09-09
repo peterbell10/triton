@@ -506,12 +506,13 @@ public:
       auto newResult = builder.create<tt::LoadOp>(
           loadOp.getLoc(), loadOp.getResult().getType(), newPtr, newMask,
           newOther, loadOp.getBoundaryCheckAttr(), loadOp.getPaddingAttr(),
-          loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
+          loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile(),
+          loadOp.getSem());
       op->getResult(0).replaceAllUsesWith(newResult);
     } else if (auto storeOp = dyn_cast<tt::StoreOp>(op)) {
       builder.create<tt::StoreOp>(storeOp.getLoc(), newPtr, storeOp.getValue(),
                                   newMask, storeOp.getCache(),
-                                  storeOp.getEvict());
+                                  storeOp.getEvict(), storeOp.getSem());
     }
 
     // Erase the original operation

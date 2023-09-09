@@ -1272,6 +1272,74 @@ def test_atomic_cas(sem, num_ctas, device):
     assert f"atom.global.{sem_str}" in h.asm["ptx"]
 
 
+@pytest.mark.parametrize("num_ctas", num_ctas_list)
+def test_load_store_semantic(num_ctas, device):
+
+    @triton.jit
+    def global_cumsum(in_ptr, out_ptr, workspace, flags, XBLOCK: tl.constexpr):
+        xid = tl.program_id(0)
+        xindex = xid * XBLOCK + tl.arange(0, XBLOCK)
+
+        block_data = tl.load(in_ptr + xindex)
+        block_sum = tl.sum(block_data)
+
+        # Publish block_sum in global memory
+        tl.store(workspace + 2 * xid, block_sum, sem="relaxed")
+        tl.store(flags + xid, 1, sem="release")
+
+        # Calculate exclusive prefix sum via decoupled lookback
+        exclusive_prefix = tl.zeros_like(block_sum)
+        test_target = xid - 1
+        while test_target >= 0:
+            flag = 0
+            while flag == 0:
+                # spin until more data is available
+                flag = tl.load(flags + test_target, sem="relaxed")
+
+            flag = tl.load(flags + test_target, sem="acquire")
+            if flag == 1:
+                exclusive_prefix += tl.load(workspace + 2 * test_target, sem="acquire")
+                test_target = test_target - 1
+            elif flag == 2:
+                exclusive_prefix += tl.load(workspace + 2 * test_target + 1, sem="acquire")
+                test_target = -1
+
+        # Make inclusive block sum visible to other blocks
+        tl.store(
+            workspace + tl.full(block_sum.shape, 2 * xid + 1, tl.int32),
+            exclusive_prefix + block_sum,
+            sem="relaxed",
+        )
+        tl.store(flags + xid, 2, sem="release")
+
+        # Compute final cumsum
+        block_scan = tl.cumsum(block_data, 0)
+        result = block_scan + exclusive_prefix
+
+        tl.store(out_ptr + xindex, result)
+
+    import tqdm
+    for _ in tqdm.tqdm(range(10**6)):
+
+        XBLOCK = 16
+        XGRID = 1024
+        in_data = torch.ones((XGRID, XBLOCK), device=device, dtype=torch.float32)
+        actual = torch.full((XGRID, XBLOCK), np.nan, device=device, dtype=torch.float32)
+        workspace = torch.zeros((XGRID, 2), device=device, dtype=torch.float32)
+        flags = torch.zeros((XGRID, 1), device=device, dtype=torch.int32)
+        expect = in_data.flatten().cumsum(0).view(XGRID, XBLOCK)
+
+        h = global_cumsum[(XGRID,)](in_data, actual, workspace, flags,
+                                    XBLOCK=XBLOCK, num_ctas=num_ctas)
+
+        torch.testing.assert_close(expect, actual)
+
+    sem_str = "sc" if sem is None else sem
+    assert f"ld.relaxed.gpu.global" in h.asm["ptx"]
+    assert f"ld.acquire.gpu.global" in h.asm["ptx"]
+    assert f"ld.release.gpu.global" in h.asm["ptx"]
+
+
 # ---------------
 # test cast
 # ---------------

@@ -445,7 +445,7 @@ struct TritonLoadPattern : public OpConversionPattern<triton::LoadOp> {
                       adaptor.getPtr(), adaptor.getMask(), adaptor.getOther(),
                       adaptor.getBoundaryCheckAttr(), adaptor.getPaddingAttr(),
                       adaptor.getCache(), adaptor.getEvict(),
-                      adaptor.getIsVolatile()),
+                      adaptor.getIsVolatile(), adaptor.getSem()),
                   adaptor.getAttributes());
     return success();
   }
@@ -459,8 +459,8 @@ struct TritonStorePattern : public OpConversionPattern<triton::StoreOp> {
                   ConversionPatternRewriter &rewriter) const override {
     addNamedAttrs(rewriter.replaceOpWithNewOp<triton::StoreOp>(
                       op, adaptor.getPtr(), adaptor.getValue(),
-                      adaptor.getMask(), adaptor.getCache(),
-                      adaptor.getEvict()),
+                      adaptor.getMask(), adaptor.getCache(), adaptor.getEvict(),
+                      adaptor.getSem()),
                   adaptor.getAttributes());
     return success();
   }

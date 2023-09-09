@@ -993,7 +993,7 @@ def dot(input, other, allow_tf32=True, out_dtype=float32, _builder=None):
 
 @builtin
 def load(pointer, mask=None, other=None, boundary_check=tuple(), padding_option="", cache_modifier="",
-         eviction_policy="", volatile=False, _builder=None):
+         eviction_policy="", volatile=False, sem=None, _builder=None):
     """
     Return a tensor of data whose values are loaded from memory at location defined by `pointer`:
         (1) `pointer` could be a single element pointer, then a scalar will be loaded
@@ -1024,6 +1024,8 @@ def load(pointer, mask=None, other=None, boundary_check=tuple(), padding_option=
     :type eviction_policy: str, optional
     :param volatile: changes volatile option in NVIDIA PTX
     :type volatile: bool, optional
+    :param sem: Memory consistency semantics
+    :type sem: str, optional
     """
     # `mask` and `other` can be constexpr
     if _constexpr_to_value(mask) is not None:
@@ -1034,12 +1036,13 @@ def load(pointer, mask=None, other=None, boundary_check=tuple(), padding_option=
     cache_modifier = _constexpr_to_value(cache_modifier)
     eviction_policy = _constexpr_to_value(eviction_policy)
     volatile = _constexpr_to_value(volatile)
+    sem = _constexpr_to_value(sem)
     return semantic.load(pointer, mask, other, boundary_check, padding_option, cache_modifier, eviction_policy,
-                         volatile, _builder)
+                         volatile, sem, _builder)
 
 
 @builtin
-def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", eviction_policy="", _builder=None):
+def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", eviction_policy="", sem=None, _builder=None):
     """
     Store a tensor of data into memory locations defined by `pointer`:
         (1) `pointer` could be a single element pointer, then a scalar will be stored
@@ -1065,6 +1068,8 @@ def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", evict
     :type cache_modifier: str, optional
     :param eviction_policy: changes eviction policy in NVIDIA PTX
     :type eviction_policy: str, optional
+    :param sem: Memory consistency semantics
+    :type sem: str, optional
     """
     # `value` can be constexpr
     value = _to_tensor(value, _builder)
@@ -1072,7 +1077,8 @@ def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", evict
         mask = _to_tensor(mask, _builder)
     cache_modifier = _constexpr_to_value(cache_modifier)
     eviction_policy = _constexpr_to_value(eviction_policy)
-    return semantic.store(pointer, value, mask, boundary_check, cache_modifier, eviction_policy, _builder)
+    sem = _constexpr_to_value(sem)
+    return semantic.store(pointer, value, mask, boundary_check, cache_modifier, eviction_policy, sem, _builder)
 
 
 @builtin

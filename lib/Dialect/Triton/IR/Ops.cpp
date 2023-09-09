@@ -85,9 +85,10 @@ void LoadOp::getEffects(
         &effects) {
   effects.emplace_back(MemoryEffects::Read::get(), getPtr(),
                        SideEffects::DefaultResource::get());
-  if (getIsVolatile())
+  if (getIsVolatile() || (getSem() != MemSemantic::WEAK)) {
     effects.emplace_back(MemoryEffects::Write::get(),
                          SideEffects::DefaultResource::get());
+  }
 }
 
 ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -168,34 +169,39 @@ static Type getLoadOpResultType(::mlir::OpBuilder &builder, Type ptrType) {
 
 void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                    ::mlir::Value ptr, ::mlir::triton::CacheModifier cache,
-                   ::mlir::triton::EvictionPolicy evict, bool isVolatile) {
+                   ::mlir::triton::EvictionPolicy evict, bool isVolatile,
+                   ::mlir::triton::MemSemantic sem) {
   LoadOp::build(builder, state, ptr, /*mask=*/{}, /*other=*/{},
-                /*boundaryCheck=*/{}, /*padding=*/{}, cache, evict, isVolatile);
+                /*boundaryCheck=*/{}, /*padding=*/{}, cache, evict, isVolatile,
+                sem);
 }
 
 void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                    ::mlir::Value ptr, ArrayRef<int32_t> boundaryCheck,
                    std::optional<::mlir::triton::PaddingOption> padding,
                    ::mlir::triton::CacheModifier cache,
-                   ::mlir::triton::EvictionPolicy evict, bool isVolatile) {
+                   ::mlir::triton::EvictionPolicy evict, bool isVolatile,
+                   ::mlir::triton::MemSemantic sem) {
   LoadOp::build(builder, state, ptr, /*mask=*/{}, /*other=*/{}, boundaryCheck,
-                padding, cache, evict, isVolatile);
+                padding, cache, evict, isVolatile, sem);
 }
 
 void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                    ::mlir::Value ptr, ::mlir::Value mask,
                    ::mlir::triton::CacheModifier cache,
-                   ::mlir::triton::EvictionPolicy evict, bool isVolatile) {
+                   ::mlir::triton::EvictionPolicy evict, bool isVolatile,
+                   ::mlir::triton::MemSemantic sem) {
   LoadOp::build(builder, state, ptr, mask, /*other=*/{}, /*boundaryCheck=*/{},
-                /*padding=*/{}, cache, evict, isVolatile);
+                /*padding=*/{}, cache, evict, isVolatile, sem);
 }
 
 void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                    ::mlir::Value ptr, ::mlir::Value mask, ::mlir::Value other,
                    ::mlir::triton::CacheModifier cache,
-                   ::mlir::triton::EvictionPolicy evict, bool isVolatile) {
+                   ::mlir::triton::EvictionPolicy evict, bool isVolatile,
+                   ::mlir::triton::MemSemantic sem) {
   LoadOp::build(builder, state, ptr, mask, other, /*boundaryCheck=*/{},
-                /*padding=*/{}, cache, evict, isVolatile);
+                /*padding=*/{}, cache, evict, isVolatile, sem);
 }
 
 void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
@@ -203,7 +209,8 @@ void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                    std::optional<ArrayRef<int32_t>> boundaryCheck,
                    std::optional<::mlir::triton::PaddingOption> padding,
                    ::mlir::triton::CacheModifier cache,
-                   ::mlir::triton::EvictionPolicy evict, bool isVolatile) {
+                   ::mlir::triton::EvictionPolicy evict, bool isVolatile,
+                   ::mlir::triton::MemSemantic sem) {
   // Operands
   state.addOperands(ptr);
   if (mask) {
@@ -234,6 +241,9 @@ void LoadOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
       ::mlir::triton::EvictionPolicyAttr::get(builder.getContext(), evict));
   state.addAttribute(getIsVolatileAttrName(state.name),
                      builder.getBoolAttr(isVolatile));
+  state.addAttribute(
+      getSemAttrName(state.name),
+      ::mlir::triton::MemSemanticAttr::get(builder.getContext(), sem));
 
   // Result type
   Type resultType = getLoadOpResultType(builder, ptr.getType());
@@ -268,7 +278,8 @@ struct CanonicalizeMaskedLoadPattern
       rewriter.replaceOpWithNewOp<triton::LoadOp>(
           loadOp, loadOp.getType(), loadOp.getPtr(), Value(), Value(),
           loadOp.getBoundaryCheckAttr(), loadOp.getPaddingAttr(),
-          loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
+          loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile(),
+          loadOp.getSem());
     } else {
       // mask = splat(0)
 
@@ -292,27 +303,30 @@ void triton::LoadOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void StoreOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                     ::mlir::Value ptr, ::mlir::Value value,
                     ::mlir::triton::CacheModifier cache,
-                    ::mlir::triton::EvictionPolicy evict) {
+                    ::mlir::triton::EvictionPolicy evict,
+                    ::mlir::triton::MemSemantic sem) {
   return StoreOp::build(builder, state, ptr, value, /*mask=*/{},
-                        /*boundaryCheck=*/{}, cache, evict);
+                        /*boundaryCheck=*/{}, cache, evict, sem);
 }
 
 void StoreOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                     ::mlir::Value ptr, ::mlir::Value value, ::mlir::Value mask,
                     ::mlir::triton::CacheModifier cache,
-                    ::mlir::triton::EvictionPolicy evict) {
+                    ::mlir::triton::EvictionPolicy evict,
+                    ::mlir::triton::MemSemantic sem) {
   return StoreOp::build(builder, state, ptr, value, mask, /*boundaryCheck=*/{},
-                        cache, evict);
+                        cache, evict, sem);
 }
 
 void StoreOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
                     ::mlir::Value ptr, ::mlir::Value value,
                     ArrayRef<int32_t> boundaryCheck,
                     ::mlir::triton::CacheModifier cache,
-                    ::mlir::triton::EvictionPolicy evict) {
+                    ::mlir::triton::EvictionPolicy evict,
+                    ::mlir::triton::MemSemantic sem) {
   return StoreOp::build(builder, state, ptr, value, /*mask=*/{},
                         builder.getDenseI32ArrayAttr(boundaryCheck), cache,
-                        evict);
+                        evict, sem);
 }
 
 // store(ptr, value, splat(1), ...) -> store(ptr, value, ...)
@@ -342,7 +356,7 @@ struct CanonicalizeMaskedStorePattern
       // mask = splat(1)
       rewriter.replaceOpWithNewOp<triton::StoreOp>(
           storeOp, storeOp.getPtr(), storeOp.getValue(), storeOp.getCache(),
-          storeOp.getEvict());
+          storeOp.getEvict(), storeOp.getSem());
     } else {
       // mask = splat(0)
       rewriter.eraseOp(storeOp);

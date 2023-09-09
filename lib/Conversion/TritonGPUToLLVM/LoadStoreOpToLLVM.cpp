@@ -163,9 +163,16 @@ struct LoadOpConversion
       auto *addrOpr =
           ptxBuilder.newAddrOperand(ptrElems[vecStart], "l", in_off);
 
+      std::string semStr;
+      llvm::raw_string_ostream os(semStr);
+      os << op.getSem();
+      const bool needSem = op.getSem() != triton::MemSemantic::WEAK;
+
       // Define the instruction opcode
       auto &ld = ptxBuilder.create<>("ld")
                      ->o("volatile", op.getIsVolatile())
+                     .o(semStr, needSem)
+                     .o("gpu", needSem)
                      .global()
                      .o("ca", op.getCache() == triton::CacheModifier::CA)
                      .o("cg", op.getCache() == triton::CacheModifier::CG)
@@ -364,9 +371,16 @@ struct StoreOpConversion
       auto *asmAddr =
           ptxBuilder.newAddrOperand(ptrElems[vecStart], "l", in_off);
 
+      std::string semStr;
+      llvm::raw_string_ostream os(semStr);
+      os << op.getSem();
+      const bool needSem = op.getSem() != triton::MemSemantic::WEAK;
+
       auto &ptxStoreInstr =
           ptxBuilder.create<>("st")
               ->global()
+              .o(semStr, needSem)
+              .o("gpu", needSem)
               .o("wb", op.getCache() == triton::CacheModifier::WB)
               .o("cg", op.getCache() == triton::CacheModifier::CG)
               .o("cs", op.getCache() == triton::CacheModifier::CS)

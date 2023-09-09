@@ -891,7 +891,7 @@ void LoopPipeliner::emitPrologue() {
                 loadStageBuffer[loadOp][stage], pipelineIterIdx, fullBarrier,
                 newMask, lookupOrDefault(loadOp.getOther(), stage),
                 loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile(),
-                /*axis*/ 0);
+                loadOp.getSem(), /*axis*/ 0);
           } else {
             newOp = builder.create<ttg::InsertSliceAsyncOp>(
                 op->getLoc(), loadsBuffer[loadOp].getType(),
@@ -914,7 +914,8 @@ void LoopPipeliner::emitPrologue() {
               lookupOrDefault(loadOp.getPtr(), stage), newMask,
               lookupOrDefault(loadOp.getOther(), stage),
               loadOp.getBoundaryCheckAttr(), loadOp.getPaddingAttr(),
-              loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
+              loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile(),
+              loadOp.getSem());
           addNamedAttrs(newOp, op->getDiscardableAttrDictionary());
         } else
           newOp = builder.clone(*op);
@@ -1263,7 +1264,8 @@ void LoopPipeliner::prefetchNextIteration(scf::ForOp newForOp,
             curMapping.lookupOrDefault(loadOp.getPtr()), newMask,
             curMapping.lookupOrDefault(loadOp.getOther()),
             loadOp.getBoundaryCheckAttr(), loadOp.getPaddingAttr(),
-            loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
+            loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile(),
+            loadOp.getSem());
         addNamedAttrs(nextOp, op->getDiscardableAttrDictionary());
         curMapping.map(loadOp.getResult(), nextOp->getResult(0));
         nextMapping.map(loadOp.getResult(), nextOp->getResult(0));
@@ -1359,7 +1361,8 @@ void LoopPipeliner::prefetchNextIteration(scf::ForOp newForOp,
             newForOp.getRegionIterArgs()[bufferIdx + nextBuffers.size()],
             insertSliceIndex, fullBarrier, newMask,
             nextMapping.lookupOrDefault(loadOp.getOther()), loadOp.getCache(),
-            loadOp.getEvict(), loadOp.getIsVolatile(), /*axis*/ 0);
+            loadOp.getEvict(), loadOp.getIsVolatile(), loadOp.getSem(),
+            /*axis*/ 0);
       } else {
         insertedVal = builder.create<ttg::InsertSliceAsyncOp>(
             op->getLoc(), loadsBuffer[loadOp].getType(),

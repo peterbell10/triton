@@ -123,8 +123,7 @@ void MaterializeLoadStorePass::materializeLoadTilePtr(
   Value inserted = b.create<ttng::InsertSliceAsyncV2Op>(
       loc, bufferTy, load.getPtr(), buffer,
       /*index*/ _0, mBarrier, load.getMask(), load.getOther(), load.getCache(),
-      load.getEvict(), load.getIsVolatile(),
-      /*axis*/ 0);
+      load.getEvict(), load.getIsVolatile(), load.getSem(), /*axis*/ 0);
   auto extractedTy = RankedTensorType::get(loadShape, elemTy, sharedEncoding);
   Value extracted = b.create<mlir::triton::gpu::ExtractSliceOp>(
       loc, extractedTy, inserted,

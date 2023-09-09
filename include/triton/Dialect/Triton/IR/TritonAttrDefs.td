@@ -24,6 +24,7 @@ def TT_MemSemanticAttr : I32EnumAttr<
       I32EnumAttrCase<"ACQUIRE", 2, "acquire">,
       I32EnumAttrCase<"RELEASE", 3, "release">,
       I32EnumAttrCase<"ACQUIRE_RELEASE", 4, "acq_rel">,
+      I32EnumAttrCase<"WEAK", 5, "weak">,
     ]> {
     let cppNamespace = "::mlir::triton";
 }

@@ -225,6 +225,7 @@ void init_triton_ir(py::module &&m) {
       .value("ACQUIRE", mlir::triton::MemSemantic::ACQUIRE)
       .value("RELEASE", mlir::triton::MemSemantic::RELEASE)
       .value("RELAXED", mlir::triton::MemSemantic::RELAXED)
+      .value("WEAK", mlir::triton::MemSemantic::WEAK)
       .export_values();
 
   py::enum_<mlir::triton::EvictionPolicy>(m, "EVICTION_POLICY",
@@ -1304,53 +1305,56 @@ void init_triton_ir(py::module &&m) {
       .def("create_load",
            [](TritonOpBuilder &self, mlir::Value &ptrs,
               mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy,
-              bool isVolatile) -> mlir::Value {
+              mlir::triton::EvictionPolicy evictionPolicy, bool isVolatile,
+              mlir::triton::MemSemantic sem) -> mlir::Value {
              return self.create<mlir::triton::LoadOp>(
-                 ptrs, cacheModifier, evictionPolicy, isVolatile);
+                 ptrs, cacheModifier, evictionPolicy, isVolatile, sem);
            })
       .def("create_store",
            [](TritonOpBuilder &self, mlir::Value &ptrs, mlir::Value &value,
               mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy) -> void {
+              mlir::triton::EvictionPolicy evictionPolicy,
+              mlir::triton::MemSemantic sem) -> void {
              self.create<mlir::triton::StoreOp>(ptrs, value, cacheModifier,
-                                                evictionPolicy);
+                                                evictionPolicy, sem);
            })
       .def("create_tensor_pointer_load",
            [](TritonOpBuilder &self, mlir::Value &ptr,
               std::vector<int32_t> &boundaryCheck,
               std::optional<mlir::triton::PaddingOption> paddingOption,
               mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy,
-              bool isVolatile) -> mlir::Value {
+              mlir::triton::EvictionPolicy evictionPolicy, bool isVolatile,
+              mlir::triton::MemSemantic sem) -> mlir::Value {
              return self.create<mlir::triton::LoadOp>(
                  ptr, boundaryCheck, paddingOption, cacheModifier,
-                 evictionPolicy, isVolatile);
+                 evictionPolicy, isVolatile, sem);
            })
       .def("create_tensor_pointer_store",
            [](TritonOpBuilder &self, mlir::Value &ptr, mlir::Value &val,
               std::vector<int32_t> &boundaryCheck,
               mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy) -> void {
-             self.create<mlir::triton::StoreOp>(ptr, val, boundaryCheck,
-                                                cacheModifier, evictionPolicy);
+              mlir::triton::EvictionPolicy evictionPolicy,
+              mlir::triton::MemSemantic sem) -> void {
+             self.create<mlir::triton::StoreOp>(
+                 ptr, val, boundaryCheck, cacheModifier, evictionPolicy, sem);
            })
       .def("create_masked_load",
            [](TritonOpBuilder &self, mlir::Value &ptrs, mlir::Value &mask,
               std::optional<mlir::Value> &other,
               mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy,
-              bool isVolatile) -> mlir::Value {
+              mlir::triton::EvictionPolicy evictionPolicy, bool isVolatile,
+              mlir::triton::MemSemantic sem) -> mlir::Value {
              return self.create<mlir::triton::LoadOp>(
                  ptrs, mask, other.value_or(mlir::Value()), cacheModifier,
-                 evictionPolicy, isVolatile);
+                 evictionPolicy, isVolatile, sem);
            })
       .def("create_masked_store",
            [](TritonOpBuilder &self, mlir::Value &ptrs, mlir::Value &val,
               mlir::Value &mask, mlir::triton::CacheModifier cacheModifier,
-              mlir::triton::EvictionPolicy evictionPolicy) -> void {
+              mlir::triton::EvictionPolicy evictionPolicy,
+              mlir::triton::MemSemantic sem) -> void {
              self.create<mlir::triton::StoreOp>(ptrs, val, mask, cacheModifier,
-                                                evictionPolicy);
+                                                evictionPolicy, sem);
            })
       .def("create_view",
            [](TritonOpBuilder &self, mlir::Value &arg,

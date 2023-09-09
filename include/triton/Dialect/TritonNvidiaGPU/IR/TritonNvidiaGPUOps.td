@@ -223,7 +223,7 @@ def TTNG_InsertSliceAsyncV2Op : TTNG_Op<"insert_slice_async_v2",
                        I32:$index, TT_Ptr:$mbar,
                        Optional<AnyTypeOf<[I1Tensor, I1]>>:$mask, Optional<TT_Type>:$other,
                        TT_CacheModifierAttr:$cache, TT_EvictionPolicyAttr:$evict,
-                       BoolAttr:$isVolatile, I32Attr:$axis);
+                       BoolAttr:$isVolatile, TT_MemSemanticAttr:$sem, I32Attr:$axis);
 
   let results = (outs TT_Tensor:$result);
 

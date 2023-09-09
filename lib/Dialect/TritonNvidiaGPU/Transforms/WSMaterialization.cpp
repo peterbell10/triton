@@ -240,6 +240,7 @@ int applyCommit(OpBuilder &builder, ttng::ProducerCommitOp &op,
             /*other=*/insertOp.getOther(),
             /*cache=*/insertOp.getCache(), /*evict=*/insertOp.getEvict(),
             /*isVolatile=*/insertOp.getIsVolatile(),
+            /*sem=*/triton::MemSemantic::WEAK,
             /*axis=*/insertOp.getAxis());
         insertOp.getResult().replaceAllUsesWith(newSliceOp.getResult());
         setAgentIds(newSliceOp, agentIds);
