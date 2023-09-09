@@ -849,6 +849,8 @@ def _str_to_sem(sem_option):
             sem = ir.MEM_SEMANTIC.ACQUIRE_RELEASE
         elif sem_option == "relaxed":
             sem = ir.MEM_SEMANTIC.RELAXED
+        elif sem_option == "sc":
+            sem = ir.MEM_SEMANTIC.SEQUENTIAL_CONSISTENT
         else:
             raise ValueError(f"Memory semantic {sem_option} not supported")
     return sem
@@ -1054,6 +1056,17 @@ def store(ptr: tl.tensor,
     else:
         # Store by a tensor of pointers or a pointer of scalar: `block_type<pointer_type<>>` or `pointer_type<>`
         return _store_legacy(ptr, val, mask, boundary_check, cache, eviction, builder)
+
+
+def memory_fence(sem: Optional[str], builder: ir.builder) -> tl.tensor:
+    if sem not in {None, "sc", "acq_rel"}:
+        raise ValueError(f"memory_fence only supports 'sc' or 'acq_rel' for sem, but got {sem}")
+
+    if sem is None:
+        sem = "sc"
+
+    sem = _str_to_sem(sem)
+    return tl.tensor(builder.create_memory_fence(sem), tl.void)
 
 
 #########

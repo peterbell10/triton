@@ -219,6 +219,17 @@ def TT_StoreOp : TT_Op<"store",
     let hasCanonicalizer = 1;
 }
 
+def TT_MemFenceOp : TT_Op<"memory_fence", [MemoryEffects<[MemWrite]>]> {
+    let summary = "Memory fence";
+    let description = [{
+        Establishes an ordering of reads and writes before and after the fence in global memory.
+        sequential consistency - applies to all reads and writes
+        acquire release        - applies only to atomic operations
+    }];
+
+    let arguments = (ins TT_MemSemanticAttr:$sem);
+}
+
 //
 // Atomic Ops
 //

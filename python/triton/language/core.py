@@ -1102,6 +1102,21 @@ def advance(base: tensor, offsets, _builder=None):
     """
     return semantic.advance(base, offsets, _builder)
 
+
+@builtin
+def memory_fence(sem, _builder=None):
+    """
+    A fence operation on global memory
+
+    Semantics can be "sc" or "acq_rel". "sc" establishes a total ordering of all
+    reads and writes, while "acq_rel" only establishes an ordering of atomic operations.
+
+    :param sem: The fence semantics, can be "sc" or "acq_rel" (default: "sc")
+
+    """
+    sem = _constexpr_to_value(sem)
+    return semantic.memory_fence(sem, _builder)
+
 # -----------------------
 # Atomic Memory Operations
 # -----------------------

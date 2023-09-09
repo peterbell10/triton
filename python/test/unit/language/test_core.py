@@ -1235,6 +1235,86 @@ def test_atomic_cas(sem, num_ctas, device):
     assert f"atom.global.{sem_str}" in h.asm["ptx"]
 
 
+@pytest.mark.parametrize("sem", [None, "sc", "acq_rel"])
+@pytest.mark.parametrize("num_ctas", num_ctas_list)
+def test_memfence(sem, num_ctas, device):
+
+    @triton.jit
+    def global_cumsum(in_ptr, out_ptr, workspace, flags, XBLOCK: tl.constexpr):
+        pid = tl.program_id(0)
+        xindex = pid * XBLOCK + tl.arange(0, XBLOCK)
+
+        vals = tl.load(in_ptr + xindex)
+        block_sum = tl.sum(vals)
+
+        # Publish block_sum in global memory
+        if sem == "acq_rel":
+            tl.atomic_xchg(workspace + 2 * xid, block_sum, sem="relaxed")
+        else:
+            tl.store(workspace + 2 * xid, block_sum)
+        tl.memory_fence(sem)
+        tl.store(flags + xid, 1)
+
+        # Calculate exclusive prefix sum via decoupled lookback
+        exclusive_prefix = tl.zeros_like(block_sum)
+        test_target = xid - 1
+        while test_target >= 0:
+            if sem == "acq_rel":
+                flag = tl.atomic_add(flags + test_target, 0, sem="relaxed")
+            else:
+                flag = tl.load(flags + test_target)
+
+            if flag == 2:
+                exclusive_prefix += tl.load(workspace + 2 * test_target + 1)
+                test_target = -1
+            elif flag == 1:
+                exclusive_prefix += tl.load(workspace + 2 * test_target)
+                test_target = test_target - 1
+            else:
+                # spin
+                tl.memory_fence(sem)
+
+        # Make inclusive block sum visible to other blocks
+        inclusive_prefix = exclusive_prefix + block_sum
+        if sem == "acq_rel":
+            tl.atomic_xchg(
+                workspace + tl.full(block_sum.shape, 2 * xid + 1, tl.int32),
+                inclusive_prefix,
+                sem="relaxed",
+            )
+        else:
+            tl.store(workspace + 2 * xid + 1, inclusive_prefix)
+        tl.memory_fence(sem)
+        tl.store(flags + xid, 2)
+
+        # Compute final cumsum
+        block_scan = tl.cumsum(block_data, 0)
+        result = block_scan + exclusive_prefix
+
+        tl.store(out_ptr + xindex, result)
+
+    import tqdm
+    for _ in tqdm.tqdm(range(10**6)):
+
+        XBLOCK = 16
+        XGRID = 1024
+        in_data = torch.ones((XGRID, XBLOCK), device=device, dtype=torch.float32)
+        actual = torch.full((XGRID, XBLOCK), np.nan, device=device, dtype=torch.float32)
+        workspace = torch.zeros((XGRID,), device=device, dtype=torch.float32)
+        flags = torch.zeros((XGRID,), device=device, dtype=torch.uint8)
+        expect = in_data.flatten().cumsum(0)
+
+        h = global_cumsum[(XGRID,)](in_data, out_data, workspace, flags,
+                                    SEM=sem, XBLOCK=XBLOCK, num_ctas=num_ctas)
+
+        torch.testing.assert_close(expect, actual)
+
+    if is_hip():
+        return
+    sem_str = "sc" if sem is None else sem
+    assert f"fence.{sem_str}.gpu" in h.asm["ptx"]
+
+
 # ---------------
 # test cast
 # ---------------

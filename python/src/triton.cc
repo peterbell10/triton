@@ -1352,6 +1352,10 @@ void init_triton_ir(py::module &&m) {
              self.create<mlir::triton::StoreOp>(ptrs, val, mask, cacheModifier,
                                                 evictionPolicy);
            })
+      .def("create_memory_fence",
+           [](TritonOpBuilder &self, mlir::triton::MemSemantic sem) {
+             self.create<mlir::triton::MemFenceOp>(sem);
+           })
       .def("create_view",
            [](TritonOpBuilder &self, mlir::Value &arg,
               std::vector<int64_t> &shape) -> mlir::Value {

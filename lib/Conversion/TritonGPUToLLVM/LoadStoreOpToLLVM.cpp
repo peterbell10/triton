@@ -1765,6 +1765,40 @@ private:
   const TensorPtrMapT *tensorPtrMap;
 };
 
+class MemFenceOpConversion : public ConvertOpToLLVMPattern<triton::MemFenceOp> {
+public:
+  MemFenceOpConversion(TritonGPUToLLVMTypeConverter &converter,
+                       PatternBenefit benefit)
+      : ConvertOpToLLVMPattern<triton::MemFenceOp>(converter, benefit) {}
+
+  LogicalResult
+  matchAndRewrite(triton::MemFenceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto moduleOp = op->getParentOfType<ModuleOp>();
+    assert(moduleOp && "Parent ModuleOp not found for MemFenceOp");
+    int numCTAs = triton::gpu::TritonGPUDialect::getNumCTAs(moduleOp);
+
+    std::string semStr;
+    llvm::raw_string_ostream os(semStr);
+    os << op.getSem();
+
+    // Ensure all writes in the current cta are made before the fence
+    barrier();
+
+    PTXBuilder ptxBuilder;
+    auto fence = ptxBuilder.create<>("fence")->o(semStr).o("gpu");
+    fence();
+
+    // Ensure all fences are complete before we continue
+    barrier();
+
+    return success();
+  }
+};
+
 void populateLoadStoreOpToLLVMPatterns(
     TritonGPUToLLVMTypeConverter &typeConverter, RewritePatternSet &patterns,
     int numWarps, ModuleAxisInfoAnalysis &axisInfoAnalysis,
@@ -1786,4 +1820,5 @@ void populateLoadStoreOpToLLVMPatterns(
       typeConverter, allocation, tmaMetadata, tensorPtrMap, benefit);
   patterns.add<StoreAsyncOpConversion>(typeConverter, allocation, tmaMetadata,
                                        tensorPtrMap, benefit);
+  patterns.add<MemFenceOpConversion>(typeConverter, benefit);
 }
