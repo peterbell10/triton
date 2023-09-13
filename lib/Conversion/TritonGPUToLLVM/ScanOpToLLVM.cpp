@@ -140,7 +140,7 @@ static void AddPartialReduce(SmallVector<Value> &srcValues,
     Value maskedAcc;
   };
   unsigned numScanBlocks = helper.getAxisNumBlocks();
-  unsigned numParallelBlocks = helper.getNonAxisNumBlocks();
+  unsigned numParallelBlocks = helper.getNumParallelBlocks();
   assert(numScanBlocks * numParallelBlocks * parallelElementsPerThread *
              scanElementsPerThreads ==
          srcValues.size());
@@ -258,12 +258,28 @@ ScanOpConversion::getDelinearizedIds(ConversionPatternRewriter &rewriter,
   Value laneIdAxis = multiDimLaneId[axis];
   Value warpIdAxis = multiDimWarpId[axis];
 
-  multiDimLaneId[axis] = i32_val(0);
-  threadsPerWarp[axis] = 1;
+  // See NOTE: [Duplicate values in ScanOp]
+  auto axisThreadsPerWarp = helper.getAxisNumThreadsPerWarp();
+  if (axisThreadsPerWarp != threadsPerWarp[axis]) {
+    laneIdAxis = urem(laneIdAxis, i32_val(axisThreadsPerWarp));
+    multiDimLaneId[axis] = sub(multiDimLaneId[axis], laneIdAxis);
+  } else {
+    multiDimLaneId[axis] = i32_val(0);
+  }
+  threadsPerWarp[axis] /= axisThreadsPerWarp;
+
   Value laneIdParallel =
       linearize(rewriter, loc, multiDimLaneId, threadsPerWarp, order);
-  multiDimWarpId[axis] = i32_val(0);
-  warpsPerCTA[axis] = 1;
+
+  // See NOTE: [Duplicate values in ScanOp]
+  auto axisNumWarps = helper.getAxisNumWarps();
+  if (axisNumWarps != warpsPerCTA[axis]) {
+    warpIdAxis = urem(warpIdAxis, i32_val(axisNumWarps));
+    multiDimWarpId[axis] = sub(multiDimWarpId[axis], warpIdAxis);
+  } else {
+    multiDimWarpId[axis] = i32_val(0);
+  }
+  warpsPerCTA[axis] /= axisNumWarps;
   Value warpIdParallel =
       linearize(rewriter, loc, multiDimWarpId, warpsPerCTA, order);
   Value flatIdParallel =

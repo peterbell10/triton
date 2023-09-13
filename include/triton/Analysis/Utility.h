@@ -71,7 +71,22 @@ public:
   explicit ScanLoweringHelper(triton::ScanOp op) : scanOp(op) {
     auto type = scanOp.getOperand(0).getType().cast<RankedTensorType>();
     srcEncoding = type.getEncoding();
+    srcShape = type.getShape();
   }
+
+  // NOTE: [Duplicate values in ScanOp]
+  //
+  // For certain shapes and encodings, some values are stored in more than one
+  // logical index. To handle this we treat it as through a new axis were
+  // inserted, and the tensor broadcast over that axis.
+  //
+  // Accordingly getAxis... sizes refer to unique elements along the encoding
+  // axis, and the getNonAxis... sizes are effectively multiplied by the number
+  // of duplicates in the encoding.
+  //
+  // TODO: This is inefficient as we do a redundant scans over duplicated
+  // values.
+
   // Return true if the lowering of the scan op is supported.
   bool isSupported();
   // Return the number of elements per thread along axis dim.
@@ -90,6 +105,8 @@ public:
   unsigned getAxisNumBlocks();
   // Return the number of blocks along non axis dim.
   unsigned getNonAxisNumBlocks();
+  // Return number of parallel blocks within a thread
+  unsigned getNumParallelBlocks();
   // Return the size of the scratch space needed for scan lowering.
   unsigned getScratchSizeInBytes();
 
@@ -102,12 +119,13 @@ public:
 
   Location getLoc() { return scanOp.getLoc(); }
   unsigned getAxis() { return scanOp.getAxis(); }
-  triton::gpu::BlockedEncodingAttr getEncoding();
+  Attribute getEncoding();
   Region &getCombineOp();
 
 private:
   triton::ScanOp scanOp;
   Attribute srcEncoding;
+  ArrayRef<int64_t> srcShape;
 };
 
 bool maybeSharedAllocationOp(Operation *op);

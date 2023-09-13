@@ -1685,7 +1685,44 @@ def test_reduce2d(op, dtype_str, shape, axis, num_ctas, device):
             np.testing.assert_equal(z_ref, z_tri)
 
 
-scan2d_shapes = [(8, 32), (16, 32), (32, 16), (2, 1024), (1024, 2), (32, 32), (1, 1024)]
+@pytest.mark.parametrize("op", ["cumsum", "cumprod"])
+@pytest.mark.parametrize("dtype_str", dtypes_with_bfloat16)
+@pytest.mark.parametrize("XBLOCK, RBLOCK", [(4, 32), (2, 16), (4, 32), (4, 8)])
+@pytest.mark.parametrize("num_ctas", num_ctas_list)
+def test_scan_broadcasted(op, dtype_str, XBLOCK, RBLOCK, num_ctas, device):
+    if is_hip():
+        pytest.skip("test_scan2_broadcasted is not supported in HIP")
+
+    check_type_supported(dtype_str, device)  # bfloat16 on cc < 80 will not be tested
+
+    # triton kernel
+    @triton.jit
+    def kernel(out_ptr, in_ptr, XBLOCK: tl.constexpr, RBLOCK: tl.constexpr):
+        xindex = tl.arange(0, XBLOCK)[:, None]
+        rindex = tl.arange(0, RBLOCK)[None, :]
+        data = tl.load(in_ptr + rindex)
+        GENERATE_TEST_HERE
+        tl.store(out_ptr + xindex * RBLOCK + rindex, result)
+
+    patch = f'result = tl.{op}(data, axis=1)'
+    kernel = patch_kernel(kernel, {'GENERATE_TEST_HERE': patch})
+
+    # numpy result
+    rs = RandomState(17)
+    x = numpy_random((RBLOCK,), dtype_str=dtype_str, rs=rs)
+    numpy_op = getattr(np, op)
+    expect = np.broadcast_to(numpy_op(x).astype(dtype_str), (XBLOCK, RBLOCK))
+    # triton result
+    x_tri = to_triton(x, device=device)
+    actual = to_triton(numpy_random((XBLOCK, RBLOCK), dtype_str=dtype_str, rs=rs),
+                       device=device, dst_type=dtype_str)
+    kernel[(1,)](actual, x_tri, XBLOCK=XBLOCK, RBLOCK=RBLOCK, num_ctas=num_ctas)
+    actual = to_numpy(actual)
+
+    np.testing.assert_allclose(expect, actual, atol=0.01)
+
+
+scan2d_shapes = [(8, 32), (16, 32), (32, 16), (2, 1024), (1024, 2), (32, 32), (1, 1024), (1, 16), (2, 8)]
 
 scan_configs = [
     (op, type, shape, axis, num_warps)
