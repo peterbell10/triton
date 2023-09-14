@@ -111,6 +111,8 @@ public:
   unsigned getNonAxisNumBlocks();
   // Return number of parallel blocks within a thread
   unsigned getNumParallelBlocks();
+  // Returns the shape of the scratch space
+  SmallVector<unsigned> getScratchShape();
   // Return the size of the scratch space needed for scan lowering.
   unsigned getScratchSizeInBytes();
 
@@ -123,7 +125,9 @@ public:
 
   Location getLoc() { return scanOp.getLoc(); }
   unsigned getAxis() { return scanOp.getAxis(); }
-  Attribute getEncoding();
+  Attribute getEncoding() { return srcEncoding; }
+  ArrayRef<int64_t> getShape() { return srcShape; }
+  triton::ScanOp getOp() { return scanOp; };
   Region &getCombineOp();
 
 private:

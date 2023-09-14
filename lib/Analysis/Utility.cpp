@@ -308,19 +308,19 @@ bool ScanLoweringHelper::isSupported() {
   return true;
 }
 
-unsigned ScanLoweringHelper::getScratchSizeInBytes() {
-  auto type = scanOp.getOperand(0).getType().cast<RankedTensorType>();
-  unsigned elementSizeInBytes = type.getElementTypeBitWidth() / 8;
-  auto mod = scanOp->getParentOfType<ModuleOp>();
-  unsigned numWarps = triton::gpu::TritonGPUDialect::getNumWarps(mod);
-  unsigned numNonAxisElementsPerWarp =
-      getNonAxisNumThreadsPerWarp() * getNonAxisNumElementsPerThread();
-  unsigned numElements = numWarps * numNonAxisElementsPerWarp *
-                         getAxisNumBlocks() * getNonAxisNumBlocks();
-  return elementSizeInBytes * numElements;
+SmallVector<unsigned> ScanLoweringHelper::getScratchShape() {
+  SmallVector<unsigned> shape(srcShape);
+  shape[getAxis()] = getAxisNumBlocks();
+  return shape;
 }
 
-Attribute ScanLoweringHelper::getEncoding() { return srcEncoding; }
+unsigned ScanLoweringHelper::getScratchSizeInBytes() {
+  auto type = scanOp.getOperand(0).getType().cast<RankedTensorType>();
+  unsigned elementSizeInBytes =
+      ceil<unsigned>(type.getElementTypeBitWidth(), 8);
+  auto shape = getScratchShape();
+  return elementSizeInBytes * product<unsigned>(shape);
+}
 
 unsigned ScanLoweringHelper::getAxisElementStride() {
   auto order = triton::gpu::getOrder(srcEncoding);
