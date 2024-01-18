@@ -795,8 +795,8 @@ class tensor:
         :param _builder: The IR builder.
         :type _builder: ir.builder
         """
-        if isinstance(bitcast, constexpr):
-            bitcast = bitcast.value
+        bitcast = _constexpr_to_value(bitcast)
+        dtype = _constexpr_to_value(dtype)
         if bitcast:
             return semantic.bitcast(self, dtype, _builder)
         return semantic.cast(self, dtype, _builder, fp_downcast_rounding)
@@ -1888,6 +1888,7 @@ def inline_asm_elementwise(asm: str, constraints: str, args: Sequence, dtype: Un
     '''
     asm = _constexpr_to_value(asm)
     constraints = _constexpr_to_value(constraints)
+    dtype = _constexpr_to_value(dtype)
     pack = _constexpr_to_value(pack)
     is_pure = _constexpr_to_value(is_pure)
 

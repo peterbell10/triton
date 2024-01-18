@@ -1372,6 +1372,32 @@ def test_cast(dtype_x, dtype_z, bitcast, size, num_ctas, device):
         np.testing.assert_allclose(z_ref, to_numpy(z_tri), rtol=0, atol=0)
 
 
+@triton.jit
+def _cast_helper(x, dtype: tl.constexpr):
+    return x.to(dtype)
+
+def test_cast_in_function_call(device):
+    # Test that .to can be called with a helper function's argument
+
+    @triton.jit
+    def kernel(X, Z, SIZE: tl.constexpr):
+        x_ptr = X + tl.arange(0, SIZE)
+        z_ptr = Z + tl.arange(0, SIZE)
+        x = tl.load(x_ptr)
+        z = _cast_helper(x, tl.int32)
+        tl.store(z_ptr, z)
+
+
+    size = 256
+    x = 100 * np.random.rand(size).astype(np.float32)
+    x_tri = to_triton(x, device=device)
+    z_tri = to_triton(np.empty((size, ), dtype=np.int32), device=device)
+    kernel[(1,)](x_tri, z_tri, size)
+
+    z_ref = x.astype(np.int32)
+    np.testing.assert_allclose(z_ref, to_numpy(z_tri), rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("dtype_str, num_warps",
                          [(dtype_str, num_warps) for dtype_str in int_dtypes + float_dtypes for num_warps in [4, 8]])
 def test_cat(dtype_str, num_warps, device):
