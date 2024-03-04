@@ -754,6 +754,8 @@ void rewriteSlice(SetVector<Value> &slice, DenseMap<Value, Attribute> &layout,
       if (auto ifOp = v.getDefiningOp<scf::IfOp>()) {
         opsToRewrite.insert(ifOp.thenYield().getOperation());
         opsToRewrite.insert(ifOp.elseYield().getOperation());
+      } else if (auto forOp = v.getDefiningOp<scf::ForOp>()) {
+        opsToRewrite.insert(forOp.getBody()->getTerminator());
       }
     } else {
       opsToRewrite.insert(v.cast<BlockArgument>().getOwner()->getParentOp());

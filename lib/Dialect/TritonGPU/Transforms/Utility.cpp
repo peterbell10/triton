@@ -656,10 +656,6 @@ getConvertBackwardSlice(Value root, SetVector<Value> &slice,
     queue.pop_back();
     if (!currentValue.getType().isa<RankedTensorType>())
       continue;
-    // Skip propagating through for op results for now.
-    // TODO: enable this based on needs.
-    if (currentValue.getDefiningOp<scf::ForOp>())
-      return failure();
     slice.insert(currentValue);
     if (layout.find(currentValue) != layout.end()) {
       if (layout[currentValue] != encoding)
@@ -677,6 +673,14 @@ getConvertBackwardSlice(Value root, SetVector<Value> &slice,
       queue.push_back({thenValue, encoding});
       queue.push_back({elseValue, encoding});
 
+      continue;
+    }
+    if (auto forOp = currentValue.getDefiningOp<scf::ForOp>()) {
+      auto results = forOp.getResults();
+      unsigned argIdx = currentValue.cast<OpResult>().getResultNumber();
+      auto yieldOp = llvm::dyn_cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+      auto value = yieldOp.getOperand(argIdx);
+      queue.push_back({value, encoding});
       continue;
     }
     if (auto *definingOp = currentValue.getDefiningOp()) {

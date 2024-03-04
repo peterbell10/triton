@@ -2216,8 +2216,8 @@ module attributes {"triton_gpu.num-ctas" = 1 : i32, "triton_gpu.num-warps" = 1 :
     // CHECK-NOT: triton_gpu.convert_layout
     // CHECK: scf.yield {{.*}} : tensor<32xf32, #blocked1>, tensor<32xf32, #blocked>, tensor<32xf32, #blocked>
     // CHECK: scf.yield {{.*}} : tensor<32xf32, #blocked1>, tensor<32xf32, #blocked>, tensor<32xf32, #blocked>
-    // TODO: This should be rematerialized as %1#2
-    // CHECK: triton_gpu.convert_layout %[[for]]#0
+    // CHECK-NOT: triton_gpu.convert_layout
+    // CHECK: tt.return %[[for]]#2, %[[for]]#1 : tensor<32xf32, #blocked>, tensor<32xf32, #blocked>
     %cst = arith.constant dense<1.000000e+00> : tensor<32xf32, #blocked1>
     %cst_0 = arith.constant dense<2.000000e+00> : tensor<32xf32, #blocked>
     %c0_i32 = arith.constant 0 : i32
