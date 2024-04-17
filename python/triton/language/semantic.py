@@ -1,5 +1,7 @@
 from __future__ import annotations  # remove after python 3.11
 
+import functools
+
 from typing import List, Optional, Sequence, Tuple, TypeVar
 
 from .._C.libtriton import ir
@@ -622,13 +624,22 @@ def permute(input: tl.tensor, dims: Tuple[int], builder: ir.builder) -> tl.tenso
     return tl.tensor(builder.create_trans(input.handle, dims), ret_type)
 
 
-def broadcast_impl_shape(input: tl.tensor, shape: List[int], builder: ir.builder) -> tl.tensor:
+def broadcast_impl_shape(input: tl.tensor, shape: List[int], builder: ir.builder,
+                         allow_expand: bool = False) -> tl.tensor:
     if not input.type.is_block():
+        if len(shape) == 0:
+            # scalar -> scalar
+            return input
+        # scalar -> tensor
         ret_ty = tl.block_type(input.type, shape)
         return tl.tensor(builder.create_splat(input.handle, shape), ret_ty)
     src_shape = input.type.get_block_shapes()
-    if len(src_shape) != len(shape):
+    if len(src_shape) < len(shape) or (not allow_expand and len(src_shape) != len(shape)):
         raise ValueError(f"Cannot broadcast, rank mismatch: {src_shape}, {shape}")
+    if allow_expand:
+        for _ in range(len(shape) - len(src_shape)):
+            input = expand_dims(input, 0, builder)
+        src_shape = input.type.get_block_shapes()
     if shape == src_shape:
         return input
     for i, item in enumerate(src_shape):
@@ -640,57 +651,39 @@ def broadcast_impl_shape(input: tl.tensor, shape: List[int], builder: ir.builder
     return tl.tensor(builder.create_broadcast(input.handle, shape), ret_ty)
 
 
-def broadcast_impl_value(lhs: tl.tensor, rhs: tl.tensor, builder: ir.builder) -> tl.tensor:
-    lhs_ty = lhs.type
-    rhs_ty = rhs.type
+def broadcast_shapes(lhs_shape: Sequence[int], rhs_shape: Sequence[int]) -> List[int]:
+    if len(lhs_shape) < len(rhs_shape):
+        lhs_shape = [1] * (len(rhs_shape) - len(lhs_shape)) + lhs_shape
+    elif len(rhs_shape) < len(lhs_shape):
+        rhs_shape = [1] * (len(lhs_shape) - len(rhs_shape)) + rhs_shape
+    assert len(rhs_shape) == len(lhs_shape)
 
-    # make_shape_compatible(block, scalar)
-    if lhs_ty.is_block() and not rhs_ty.is_block():
-        rhs_ty = tl.block_type(rhs_ty.scalar, lhs_ty.shape)
-        rhs = tl.tensor(builder.create_splat(rhs.handle, lhs_ty.get_block_shapes()), rhs_ty)
-    # make_shape_compatible(scalar, block)
-    elif not lhs_ty.is_block() and rhs_ty.is_block():
-        lhs_ty = tl.block_type(lhs_ty.scalar, rhs_ty.shape)
-        lhs = tl.tensor(builder.create_splat(lhs.handle, rhs_ty.get_block_shapes()), lhs_ty)
-    # make_shape_compatible(block, block)
-    elif lhs_ty.is_block() and rhs_ty.is_block():
-        lhs_shape = lhs_ty.get_block_shapes()
-        rhs_shape = rhs_ty.get_block_shapes()
+    ret_shape = [1] * len(lhs_shape)
+    for i, (left, right) in enumerate(zip(lhs_shape, rhs_shape)):
+        if left == 1:
+            ret_shape[i] = right
+        elif (right == 1) or (right == left):
+            ret_shape[i] = left
+        else:
+            raise ValueError("Cannot broadcast incompatible dimensions "
+                             f"at index {i}: {left} and {right}")
+    return ret_shape
 
-        if len(lhs_shape) < len(rhs_shape):
-            # Add new axes to lhs
-            for _ in range(len(lhs_shape), len(rhs_shape)):
-                lhs = tl.tensor(builder.create_expand_dims(lhs.handle, 0),
-                                tl.block_type(lhs_ty.scalar, [1] + lhs_shape))
-                lhs_ty = lhs.type
-                lhs_shape = lhs_ty.get_block_shapes()
-        elif len(rhs_shape) < len(lhs_shape):
-            # Add new axes to rhs
-            for _ in range(len(rhs_shape), len(lhs_shape)):
-                rhs = tl.tensor(builder.create_expand_dims(rhs.handle, 0),
-                                tl.block_type(rhs_ty.scalar, [1] + rhs_shape))
-                rhs_ty = rhs.type
-                rhs_shape = rhs_ty.get_block_shapes()
-        assert len(rhs_shape) == len(lhs_shape)
 
-        ret_shape = []
-        for i, left in enumerate(lhs_shape):
-            right = rhs_shape[i]
-            if left == 1:
-                ret_shape.append(right)
-            elif (right == 1) or (right == left):
-                ret_shape.append(left)
-            else:
-                raise ValueError("Cannot make_shape_compatible: incompatible dimensions "
-                                 "at index " + str(i) + ": " + str(left) + " and " + str(right))
-        if lhs_shape != ret_shape:
-            ret_ty = tl.block_type(lhs_ty.scalar, ret_shape)
-            lhs = tl.tensor(builder.create_broadcast(lhs.handle, ret_shape), ret_ty)
-        if rhs_shape != ret_shape:
-            ret_ty = tl.block_type(rhs_ty.scalar, ret_shape)
-            rhs = tl.tensor(builder.create_broadcast(rhs.handle, ret_shape), ret_ty)
-    # (scalar, scalar) => returns original blocks
-    return lhs, rhs
+def shape_from_type(ty):
+    return ty.shape if isinstance(ty, tl.block_type) else []
+
+
+def broadcast_tensors(*args: tl.tensor, builder: ir.builder) -> Tuple[tl.tensor, ...]:
+    target_shape = functools.reduce(
+        broadcast_shapes,
+        (shape_from_type(x.type) for x in args),
+    )
+    return tuple(broadcast_impl_shape(x, target_shape, builder, allow_expand=True) for x in args)
+
+
+def broadcast_impl_value(lhs: tl.tensor, rhs: tl.tensor, builder: ir.builder) -> Tuple[tl.tensor, tl.tensor]:
+    return broadcast_tensors(lhs, rhs, builder=builder)
 
 
 #######
@@ -1416,13 +1409,16 @@ def where(condition: tl.tensor, x: tl.tensor, y: tl.tensor, builder: ir.builder)
 # ===----------------------------------------------------------------------===
 
 
-def wrap_tensor(x, scalar_ty, ret_shape):
+def shaped_type(scalar_ty, ret_shape):
     if ret_shape:
-        res_ty = tl.block_type(scalar_ty, ret_shape)
+        return tl.block_type(scalar_ty, ret_shape)
     else:
         # 0d-tensor -> scalar
-        res_ty = scalar_ty
-    return tl.tensor(x, res_ty)
+        return scalar_ty
+
+
+def wrap_tensor(x, scalar_ty, ret_shape):
+    return tl.tensor(x, shaped_type(scalar_ty, ret_shape))
 
 
 def reduction(inputs: Sequence[tl.tensor], axis: int, region_builder_fn, builder: ir.builder) -> Tuple[tl.tensor, ...]:
@@ -1466,6 +1462,27 @@ def associative_scan(inputs: Sequence[tl.tensor], axis: int, region_builder_fn, 
     scan_op.verify()
 
     return tuple(wrap_tensor(scan_op.get_result(i), inputs[i].type.scalar, shape) for i in range(len(inputs)))
+
+
+# ===----------------------------------------------------------------------===
+#                               Map Elementwise
+# ===----------------------------------------------------------------------===
+
+
+def map_elementwise(inputs: Sequence[tl.tensor], result_types: Sequence[tl.dtype], region_builder_fn,
+                    builder: ir.builder) -> Tuple[tl.tensor, ...]:
+    inputs = broadcast_tensors(*inputs, builder=builder)
+    shape = shape_from_type(inputs[0].type)
+
+    result_types = [shaped_type(ty.scalar, shape) for ty in result_types]
+    elementwise_op = builder.create_map_elementwise(
+        [t.handle for t in inputs],
+        [ty.to_ir(builder) for ty in result_types],
+    )
+    region_builder_fn(elementwise_op)
+    elementwise_op.verify()
+
+    return tuple(tl.tensor(elementwise_op.get_result(i), ty) for i, ty in enumerate(result_types))
 
 
 # ===----------------------------------------------------------------------===

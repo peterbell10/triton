@@ -272,6 +272,7 @@ void init_triton_ir(py::module &&m) {
       .def("get_parent_region", &Region::getParentRegion, ret::reference)
       .def("size", [](Region &self) { return self.getBlocks().size(); })
       .def("empty", &Region::empty)
+      .def("push_back", &Region::push_back)
       .def("id", [](Region &self) { return (uint64_t)&self; });
 
   py::class_<Block>(m, "block", py::module_local())
@@ -1451,6 +1452,15 @@ void init_triton_ir(py::module &&m) {
                return_values.push_back(py::cast<Value>(arg));
              }
              return self.create<ScanReturnOp>(return_values);
+           })
+      .def("create_map_elementwise",
+           [](TritonOpBuilder &self, std::vector<Value> inputs,
+              std::vector<Type> returnTys) -> OpState {
+             return self.create<MapElementwiseOp>(returnTys, inputs);
+           })
+      .def("create_map_elementwise_ret",
+           [](TritonOpBuilder &self, std::vector<Value> returnVals) -> OpState {
+             return self.create<MapElementwiseReturnOp>(returnVals);
            })
       .def("create_ptr_to_int",
            [](TritonOpBuilder &self, Value &val, Type &type) -> Value {

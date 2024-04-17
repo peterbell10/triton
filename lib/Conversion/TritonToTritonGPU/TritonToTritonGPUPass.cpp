@@ -476,6 +476,32 @@ struct TritonScanPattern : public OpConversionPattern<triton::ScanOp> {
   }
 };
 
+struct TritonMapElementwisePattern
+    : public OpConversionPattern<triton::MapElementwiseOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(triton::MapElementwiseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    SmallVector<Type> resultTys;
+    auto err = converter->convertTypes(op.getResults().getType(), resultTys);
+    if (failed(err)) {
+      return err;
+    }
+
+    auto newMapOp = rewriter.create<triton::MapElementwiseOp>(
+        op.getLoc(), resultTys, adaptor.getOperands());
+    addNamedAttrs(newMapOp, adaptor.getAttributes());
+
+    auto &newScalarOp = newMapOp.getScalarOp();
+    rewriter.cloneRegionBefore(op.getScalarOp(), newScalarOp,
+                               newScalarOp.end());
+    rewriter.replaceOp(op, newMapOp.getResult());
+    return success();
+  }
+};
+
 class TritonFuncOpPattern : public OpConversionPattern<triton::FuncOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -541,9 +567,11 @@ void populateTritonPatterns(TritonGPUTypeConverter &typeConverter,
       GenericOpPattern<triton::ElementwiseInlineAsmOp>, TritonReducePattern,
       GenericOpPattern<triton::ReduceReturnOp>, TritonScanPattern,
       GenericOpPattern<triton::ScanReturnOp>,
-      GenericOpPattern<triton::MakeRangeOp>, TritonExpandDimsPattern,
-      TritonTransPattern, TritonDotPattern, GenericOpPattern<triton::LoadOp>,
-      GenericOpPattern<triton::StoreOp>, GenericOpPattern<triton::HistogramOp>,
+      GenericOpPattern<triton::MapElementwiseReturnOp>,
+      TritonMapElementwisePattern, GenericOpPattern<triton::MakeRangeOp>,
+      TritonExpandDimsPattern, TritonTransPattern, TritonDotPattern,
+      GenericOpPattern<triton::LoadOp>, GenericOpPattern<triton::StoreOp>,
+      GenericOpPattern<triton::HistogramOp>,
       GenericOpPattern<triton::ExternElementwiseOp>,
       GenericOpPattern<triton::PrintOp>, GenericOpPattern<triton::AssertOp>,
       GenericOpPattern<triton::AtomicCASOp>,

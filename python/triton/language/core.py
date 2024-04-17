@@ -4,7 +4,7 @@ from warnings import warn
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
-from typing import Union, Callable, List, Sequence, TypeVar, cast, Optional
+from typing import Union, Callable, List, Sequence, TypeVar, cast, Optional, Tuple
 import builtins
 from ..runtime.jit import jit
 import inspect
@@ -2072,6 +2072,68 @@ def histogram(input, num_bins, _builder=None, _generator=None):
     """
     num_bins = _constexpr_to_value(num_bins)
     return semantic.histogram(input, num_bins, _builder)
+
+
+@builtin
+def map_elementwise(
+    scalar_fn: Callable[..., Tuple[tensor, ...]],
+    *args: tensor,
+    _builder=None,
+    _generator=None,
+):
+    '''
+        Map a scalar function over a tensor.
+
+        The input tensors :code:`args` are implicitly broadcasted to the same shape.
+
+        This may be useful in allowing control flow over single elements in a tensor,
+        for example a multi-branch function where one branch is more expensive. With
+        :code:`tl.where` you are forced to calculate both sides of the branch, but
+        with an if we only execute one side.
+
+        .. highlight:: python
+        .. code-block:: python
+
+            @triton.jit
+            def selu_scalar(x, alpha):
+                if x > 0:
+                    return a
+                else:
+                    return alpha * (tl.exp(x) - 1)
+
+            @triton.jit
+            def selu(x, alpha):
+                return tl.map_elementwise(selu_scalar, x, alpha)
+
+        :param scalar_fn: the function to map over.
+        :return: one tensor or a tuple of tensors, depending on the mapped function.
+    '''
+    # Build the block for the nested region first to discover the return types
+    in_scalar_tys = [t.type.scalar for t in args]
+    block = _builder.new_block()
+    scalar_args = []
+    for i, ty in enumerate(in_scalar_tys):
+        block.add_argument(ty.to_ir(_builder))
+        scalar_args.append(tensor(block.arg(i), ty))
+
+    with _insertion_guard(_builder):
+        _builder.set_insertion_point_to_start(block)
+        scalar_results = _generator.call_JitFunction(scalar_fn, scalar_args, kwargs={})
+
+        is_single = isinstance(scalar_results, tensor)
+        if is_single:
+            scalar_results = scalar_results,
+
+        handles = [r.handle for r in scalar_results]
+        _builder.create_map_elementwise_ret(handles)
+    result_types = [x.type for x in scalar_results]
+
+    def make_elementwise_region(elementwise_op):
+        region = elementwise_op.get_region(0)
+        region.push_back(block)
+
+    result = semantic.map_elementwise(args, result_types, make_elementwise_region, _builder)
+    return result[0] if is_single else result
 
 
 # -----------------------
