@@ -664,12 +664,11 @@ def TT_DotOp : TT_Op<"dot", [Pure,
 def TT_ReduceOp: TT_Op<"reduce",
                        [Pure,
                         SameOperandsEncoding,
-                        SingleBlock,
                         DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
     let summary = "Reduction using generic combination algorithm";
     let arguments = (ins Variadic<TT_Tensor>:$srcs, I32Attr:$axis);
     let results = (outs Variadic<TT_Type>:$result);
-    let regions = (region SizedRegion<1>:$combineOp);
+    let regions = (region AnyRegion:$combineOp);
     let builders = [
         OpBuilder<(ins "ValueRange":$srcs, "int":$axis)>,
     ];
@@ -696,12 +695,11 @@ def TT_ScanOp: TT_Op<"scan",
                        [Pure,
                         SameOperandsAndResultEncoding,
                         SameOperandsAndResultShape,
-                        SingleBlock,
                         DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
     let summary = "Associative scan using generic combination algorithm";
     let arguments = (ins Variadic<TT_Tensor>:$srcs, I32Attr:$axis, BoolAttr:$reverse);
     let results = (outs Variadic<TT_Tensor>:$result);
-    let regions = (region SizedRegion<1>:$combineOp);
+    let regions = (region AnyRegion:$combineOp);
     let builders = [
         OpBuilder<(ins "ValueRange":$srcs, "int":$axis, "bool":$reverse)>,
     ];

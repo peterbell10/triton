@@ -26,12 +26,6 @@ static SmallVector<Value> accumulate(ConversionPatternRewriter &rewriter,
     return cur;
   }
   assert(cur.size() == acc.size());
-  // Create a new copy of the reduce block, and inline it
-  Block *currentBlock = rewriter.getBlock();
-  Region &parent = *currentBlock->getParent();
-  rewriter.cloneRegionBefore(combineOp, &parent.front());
-  auto &newScan = parent.front();
-  auto returnOp = dyn_cast<triton::ScanReturnOp>(newScan.getTerminator());
 
   SmallVector<Value> combineArgs(2 * acc.size());
   for (unsigned i = 0; i < acc.size(); ++i) {
@@ -39,14 +33,8 @@ static SmallVector<Value> accumulate(ConversionPatternRewriter &rewriter,
     combineArgs[acc.size() + i] = cur[i];
   }
 
-  rewriter.inlineBlockBefore(&newScan, &*rewriter.getInsertionPoint(),
-                             combineArgs);
-  SmallVector<Value> results;
-  llvm::transform(returnOp.getResult(), std::back_inserter(results),
-                  [&](Value res) { return rewriter.getRemappedValue(res); });
-  // Delete the terminator, which is no longer used
-  rewriter.eraseOp(returnOp);
-  return results;
+  return inlineRegion<ScanReturnOp>(rewriter, combineOp, combineArgs,
+                                    combineArgs[0].getLoc());
 }
 
 // Scan a contiguous elements within a thread and update `srcValues` in place.

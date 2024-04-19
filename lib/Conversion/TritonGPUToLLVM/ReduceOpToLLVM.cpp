@@ -85,29 +85,18 @@ private:
       return;
     }
 
-    // Create a new copy of the reduce block, and inline it
-    Block *currentBlock = rewriter.getBlock();
-    Region &parent = *currentBlock->getParent();
-    rewriter.cloneRegionBefore(combineOp, &parent.front());
-    auto &newReduce = parent.front();
-    auto returnOp = dyn_cast<triton::ReduceReturnOp>(newReduce.getTerminator());
-
     llvm::SmallVector<Value> combineArgs(2 * acc.size());
     for (unsigned i = 0; i < acc.size(); ++i) {
       combineArgs[i] = acc[i];
       combineArgs[acc.size() + i] = cur[i];
     }
 
-    rewriter.inlineBlockBefore(&newReduce, &*rewriter.getInsertionPoint(),
-                               combineArgs);
+    auto results = inlineRegion<ReduceReturnOp>(
+        rewriter, combineOp, combineArgs, combineArgs[0].getLoc());
 
-    auto results = returnOp.getResult();
     for (unsigned i = 0; i < acc.size(); ++i) {
       acc[i] = results[i];
     }
-
-    // Delete the terminator, which is no longer used
-    rewriter.eraseOp(returnOp);
   }
 
   SmallVector<SmallVector<Value>>

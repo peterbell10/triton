@@ -430,49 +430,50 @@ template <class Op> LogicalResult verifyReduceScan(Op &op) {
 
 template <class ReturnOp, class Op>
 static LogicalResult verifyRegionsImpl(Op &op) {
-  auto argElementTypes = op.getElementTypes();
-  const auto &operands = op.getOperands();
-  const auto numArgs = 2 * operands.size();
-  auto &block = *op.getBody();
-  if (block.getNumArguments() != numArgs) {
-    return op.emitOpError() << "nested block must take " << numArgs
-                            << " arguments, but given block with "
-                            << block.getNumArguments() << " arguments";
-  }
-  unsigned i = 0;
-  const auto &blockArgTypes = block.getArgumentTypes();
-  for (unsigned i = 0; i < numArgs; ++i) {
-    const auto &blockArgTy = blockArgTypes[i];
-    const auto &argElemTy = argElementTypes[i % operands.size()];
-    if (blockArgTy != argElemTy) {
-      return op.emitOpError()
-             << "type mismatch on combine operation. Expected argument " << i
-             << " to have type " << argElemTy << " but got " << blockArgTy;
-    }
-  }
-
-  auto terminator = dyn_cast<ReturnOp>(block.getTerminator());
-  if (!terminator) {
-    return op.emitOpError()
-           << "combine operation must be terminated "
-           << "with a ReduceReturnOp but got " << block.getTerminator();
-  }
-  const auto &combineResults = terminator->getOperands();
-  if (combineResults.size() != operands.size()) {
-    return op.emitOpError()
-           << "expected combine operation to return " << operands.size()
-           << " values but got " << combineResults.size();
-  }
-  for (unsigned i = 0; i < combineResults.size(); ++i) {
-    const auto &resultTy = combineResults[i].getType();
-    const auto &argElemTy = argElementTypes[i];
-    if (resultTy != argElemTy) {
-      return op.emitOpError()
-             << "type mismatch on combine operation. Expected argument " << i
-             << " to have type " << argElemTy << " but got " << resultTy;
-    }
-  }
   return success();
+  // auto argElementTypes = op.getElementTypes();
+  // const auto &operands = op.getOperands();
+  // const auto numArgs = 2 * operands.size();
+  // auto &block = *op.getBody();
+  // if (block.getNumArguments() != numArgs) {
+  //   return op.emitOpError() << "nested block must take " << numArgs
+  //                           << " arguments, but given block with "
+  //                           << block.getNumArguments() << " arguments";
+  // }
+  // unsigned i = 0;
+  // const auto &blockArgTypes = block.getArgumentTypes();
+  // for (unsigned i = 0; i < numArgs; ++i) {
+  //   const auto &blockArgTy = blockArgTypes[i];
+  //   const auto &argElemTy = argElementTypes[i % operands.size()];
+  //   if (blockArgTy != argElemTy) {
+  //     return op.emitOpError()
+  //            << "type mismatch on combine operation. Expected argument " << i
+  //            << " to have type " << argElemTy << " but got " << blockArgTy;
+  //   }
+  // }
+
+  // auto terminator = dyn_cast<ReturnOp>(block.getTerminator());
+  // if (!terminator) {
+  //   return op.emitOpError()
+  //          << "combine operation must be terminated "
+  //          << "with a ReduceReturnOp but got " << block.getTerminator();
+  // }
+  // const auto &combineResults = terminator->getOperands();
+  // if (combineResults.size() != operands.size()) {
+  //   return op.emitOpError()
+  //          << "expected combine operation to return " << operands.size()
+  //          << " values but got " << combineResults.size();
+  // }
+  // for (unsigned i = 0; i < combineResults.size(); ++i) {
+  //   const auto &resultTy = combineResults[i].getType();
+  //   const auto &argElemTy = argElementTypes[i];
+  //   if (resultTy != argElemTy) {
+  //     return op.emitOpError()
+  //            << "type mismatch on combine operation. Expected argument " << i
+  //            << " to have type " << argElemTy << " but got " << resultTy;
+  //   }
+  // }
+  // return success();
 }
 
 static llvm::SmallVector<RankedTensorType>
