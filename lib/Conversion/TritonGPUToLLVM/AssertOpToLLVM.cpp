@@ -51,8 +51,13 @@ struct AssertOpConversion : public ConvertOpToLLVMPattern<triton::AssertOp> {
     // if (condition) {
     //   #block2
     //   __assertfail(message);
+    //   return;
     // }
     // #block3
+
+    // Return after __assertfail so ptxas knows registers don't need to be
+    // preserved for after the function returns
+
     Block *prevBlock = op->getBlock();
 
     Block *ifBlock = rewriter.splitBlock(prevBlock, op->getIterator());
@@ -62,7 +67,7 @@ struct AssertOpConversion : public ConvertOpToLLVMPattern<triton::AssertOp> {
     // Split a block after the call.
     Block *thenBlock = rewriter.splitBlock(ifBlock, op->getIterator());
     rewriter.setInsertionPointToEnd(ifBlock);
-    rewriter.create<cf::BranchOp>(loc, thenBlock);
+    rewriter.create<triton::ReturnOp>(loc);
     rewriter.setInsertionPointToEnd(prevBlock);
     rewriter.create<cf::CondBranchOp>(loc, condition, ifBlock, thenBlock);
   }
