@@ -29,26 +29,6 @@ bool isZero(Value val) {
   return false;
 }
 
-bool isBroadcastConstantCombinable(Attribute value) {
-  if (auto denseValue = dyn_cast<DenseElementsAttr>(value)) {
-    return denseValue.isSplat();
-  }
-  return isa<FloatAttr, IntegerAttr>(value);
-}
-
-DenseElementsAttr getConstantValue(Builder &builder, Attribute value,
-                                   Value bcast_res) {
-  auto resType = cast<ShapedType>(bcast_res.getType());
-  DenseElementsAttr res;
-  if (auto denseValue = dyn_cast<DenseElementsAttr>(value)) {
-    res =
-        DenseElementsAttr::get(resType, denseValue.getSplatValue<Attribute>());
-  } else {
-    res = DenseElementsAttr::get(resType, value);
-  }
-  return res;
-}
-
 bool isAddPtrOffsetCombinable(Value first, Value second) {
   auto GetConstantIntValue = [](Value val) -> std::optional<llvm::APInt> {
     DenseElementsAttr constAttr;
@@ -94,50 +74,6 @@ bool isAddPtrOffsetCombinable(Value first, Value second) {
 using FastMathFlags = arith::FastMathFlags;
 
 #include "TritonCombine.inc"
-
-// select(cond, load(ptrs, splat(cond), ???), other)
-//   => load(ptrs, splat(cond), other)
-class CombineSelectMaskedLoadPattern : public RewritePattern {
-public:
-  CombineSelectMaskedLoadPattern(MLIRContext *context)
-      : RewritePattern(arith::SelectOp::getOperationName(), 3, context,
-                       {LoadOp::getOperationName()}) {}
-
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto selectOp = llvm::dyn_cast<arith::SelectOp>(op);
-    if (!selectOp)
-      return failure();
-
-    Value trueValue = selectOp.getTrueValue();
-    Value falseValue = selectOp.getFalseValue();
-    Value condSelect = selectOp.getCondition();
-
-    auto *loadOpCandidate = trueValue.getDefiningOp();
-    auto loadOp = llvm::dyn_cast_or_null<LoadOp>(loadOpCandidate);
-    if (!loadOp)
-      return failure();
-
-    Value mask = loadOp.getMask();
-    if (!mask)
-      return failure();
-
-    auto *splatOpCandidate = mask.getDefiningOp();
-    auto splatOp = llvm::dyn_cast_or_null<SplatOp>(splatOpCandidate);
-    if (!splatOp)
-      return failure();
-
-    auto splatCond = splatOp.getSrc();
-    if (splatCond != condSelect)
-      return failure();
-
-    rewriter.replaceOpWithNewOp<LoadOp>(
-        op, loadOp.getPtr(), loadOp.getMask(), /*other=*/falseValue,
-        loadOp.getBoundaryCheckAttr(), loadOp.getPaddingAttr(),
-        loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
-    return success();
-  }
-};
 
 // sum(x[:, :, None] * y[None, :, :], 1)
 // -> dot(x, y)

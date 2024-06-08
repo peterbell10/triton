@@ -44,11 +44,29 @@ def CombineAddPtrPattern : Pat<
         (TT_AddPtrOp $ptr, (Arith_AddIOp $idx0, $idx1, DefOverflow)),
         [(Constraint<CPred<"isAddPtrOffsetCombinable($0, $1)">> $idx0, $idx1)]>;
 
-// broadcast(cst) => cst
-def getConstantValue : NativeCodeCall<"getConstantValue($_builder, $0, $1)">;
-def CombineBroadcastConstantPattern : Pat<
-    (TT_BroadcastOp:$bcast_res (Arith_ConstantOp $value)),
-    (Arith_ConstantOp (getConstantValue $value, $bcast_res), (location $bcast_res)),
-    [(Constraint<CPred<"isBroadcastConstantCombinable($0)">> $value)]>;
+// select(cond, load(ptrs, splat(cond), ???), other)
+//   => load(ptrs, splat(cond), other)
+def HasOneUse: Constraint<CPred<"$_self.hasOneUse()">, "has one use">;
+def CombineSelectMaskedLoadSplatPattern: Pat<
+    (TT_SelectOp
+        $cond,
+        (TT_LoadOp:$load $ptrs, (TT_SplatOp:$splat_cond $cond), $other_load,
+            $boundaryCheck, $padding, $cache, $evict, $isVolatile),
+        $other_select),
+    (TT_LoadOp $ptrs, $splat_cond, $other_select,
+        $boundaryCheck, $padding, $cache, $evict, $isVolatile),
+    [HasOneUse $load]>;
+
+// select(cond, load(ptrs, cond, ???), other)
+//   => load(ptrs, cond, other)
+def CombineSelectMaskedLoadPattern: Pat<
+    (TT_SelectOp
+        $cond,
+        (TT_LoadOp:$load $ptrs, $cond, $other_load,
+            $boundaryCheck, $padding, $cache, $evict, $isVolatile),
+        $other_select),
+    (TT_LoadOp $ptrs, $cond, $other_select,
+        $boundaryCheck, $padding, $cache, $evict, $isVolatile),
+    [HasOneUse $load]>;
 
 #endif

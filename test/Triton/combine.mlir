@@ -170,7 +170,7 @@ tt.func @test_not_combine_addptr_pattern_overflow(%base: !tt.ptr<f32>) -> tensor
 }
 
 // CHECK-LABEL: @test_combine_select_masked_load_pattern
-tt.func @test_combine_select_masked_load_pattern(%ptr: tensor<8x!tt.ptr<f32>>, %cond: i1) -> (tensor<8xf32>, tensor<8xf32>) {
+tt.func @test_combine_select_masked_load_pattern(%ptr: tensor<8x!tt.ptr<f32>>, %cond: i1) -> (tensor<8xf32>, tensor<8xf32>, tensor<8xf32>) {
     %mask = tt.splat %cond : i1 -> tensor<8xi1>
     %false_val = arith.constant dense<0.0> : tensor<8xf32>
 
@@ -182,8 +182,12 @@ tt.func @test_combine_select_masked_load_pattern(%ptr: tensor<8x!tt.ptr<f32>>, %
     %y = tt.load %ptr, %mask, %false_val : tensor<8x!tt.ptr<f32>>
     %1 = arith.select %cond, %y, %false_val : tensor<8xf32>
 
-    // CHECK: tt.return %[[res1]], %[[res2]] : tensor<8xf32>, tensor<8xf32>
-    tt.return %0, %1 : tensor<8xf32>, tensor<8xf32>
+    // CHECK: %[[res3:.*]] = tt.load %{{.*}}, %{{.*}}, %{{.*}} : tensor<8x!tt.ptr<f32>>
+    %z = tt.load %ptr, %mask, %false_val : tensor<8x!tt.ptr<f32>>
+    %2 = arith.select %mask, %z, %false_val : tensor<8xf32>
+
+    // CHECK: tt.return %[[res1]], %[[res2]] %[[res3]] : tensor<8xf32>, tensor<8xf32>, tensor<8xf32>
+    tt.return %0, %1, %2 : tensor<8xf32>, tensor<8xf32>, tensor<8xf32>
 }
 
 // CHECK-LABEL: @test_combine_select_masked_load_fail_pattern
@@ -205,7 +209,14 @@ tt.func @test_combine_select_masked_load_fail_pattern(%ptr: tensor<8x!tt.ptr<f32
     // CHECK: %{{.*}} = arith.select %{{.*}}, %{{.*}}, %{{.*}} : tensor<8xf32>
     %2 = arith.select %cond1, %real_load1, %false_val : tensor<8xf32>
 
-    tt.return %0, %1, %2 : tensor<8xf32>, tensor<8xf32>, tensor<8xf32>
+    // Case 4: load has multiple users
+    %mask = tt.splat $cond0: tensor<8xi1>
+    %real_load2 = tt.load %ptr, %mask, %false_val : tensor<8x!tt.ptr<f32>>
+    %3 = arith.add %real_load2, $real_load2: tensor<8xf32>
+    // CHECK: %{{.*}} = arith.select %{{.*}}, %{{.*}}, %{{.*}} : tensor<8xf32>
+    %4 = arith.select %cond0, %real_load2L %false_val: tensor<8xf32>
+
+    tt.return %0, %1, %2, %4 : tensor<8xf32>, tensor<8xf32>, tensor<8xf32>, tensor<8xf32>
 }
 
 // CHECK-LABEL: @test_combine_broadcast_constant_pattern
